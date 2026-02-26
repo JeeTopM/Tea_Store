@@ -5,7 +5,8 @@
 <div class="row row-cols-1 row-cols-md-3 g-4">
     {% for item in store_statuses %}
         <div class="col">
-            <div class="card shadow-sm border-0 {{ item.status_class }}">
+            <div class="card shadow-sm border-0 {{ item.status_class }} store-card"
+                onclick="window.location='{% url 'store_detail' item.store.id %}'">
                 <div class="card-body">
                     <h5 class="card-title">{{ item.store.name }}</h5>
                     <p class="card-text mb-1">{{ item.status_text }}</p>

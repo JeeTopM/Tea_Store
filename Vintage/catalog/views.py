@@ -66,6 +66,20 @@ def handle_form(request, form_class, template, redirect_name, instance=None, tit
         return redirect(redirect_name)
     return render(request, template, {'form': form, 'title': title})
 
+def store_detail(request, pk):
+    store = get_object_or_404(Store, pk=pk)
+
+    batches = (
+        ProductBatch.objects
+        .select_related('product__category')
+        .filter(store=store, is_available=True)
+        .order_by('expiration_date')
+    )
+
+    return render(request, 'catalog/store_detail.html', {
+        'store': store,
+        'batches': batches,
+    })
 
 # --- Магазины ---
 def store_list(request):

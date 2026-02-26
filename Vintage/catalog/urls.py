@@ -7,6 +7,7 @@ urlpatterns = [
 
     # Магазины
     path('stores/', views.store_list, name='store_list'),
+    path('stores/<int:pk>/', views.store_detail, name='store_detail'),
     path('stores/add/', views.store_create, name='store_create'),
     path('stores/<int:pk>/edit/', views.store_update, name='store_update'),
     path('stores/<int:pk>/delete/', views.store_delete, name='store_delete'),
