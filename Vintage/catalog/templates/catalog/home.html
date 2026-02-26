@@ -1,0 +1,20 @@
+{% extends 'catalog/base.html' %}
+{% block title %}Главная{% endblock %}
+{% block content %}
+<h1 class="mb-4">Состояние магазинов</h1>
+<div class="row row-cols-1 row-cols-md-3 g-4">
+    {% for item in store_statuses %}
+        <div class="col">
+            <div class="card shadow-sm border-0 {{ item.status_class }}">
+                <div class="card-body">
+                    <h5 class="card-title">{{ item.store.name }}</h5>
+                    <p class="card-text mb-1">{{ item.status_text }}</p>
+                    <small>Просрочено: {{ item.expired_count }}, скоро истечёт: {{ item.expiring_count }}</small>
+                </div>
+            </div>
+        </div>
+    {% empty %}
+        <p>Пока нет магазинов.</p>
+    {% endfor %}
+</div>
+{% endblock %}

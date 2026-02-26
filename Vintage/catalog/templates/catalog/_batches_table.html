@@ -1,0 +1,28 @@
+<table class="table table-sm table-striped align-middle mt-2">
+    <thead>
+        <tr>
+            <th>Магазин</th>
+            <th>Товар</th>
+            <th>Дата производства</th>
+            <th>Годен до</th>
+            <th>Кол-во</th>
+            <th>Цена</th>
+            <th>Осталось дней</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for b in batches %}
+        <tr class="{% if b.is_expired %}table-danger{% elif b.is_expiring_soon %}table-warning{% endif %}">
+            <td>{{ b.store.name }}</td>
+            <td>{{ b.product.name }}</td>
+            <td>{{ b.production_date }}</td>
+            <td>{{ b.expiration_date }}</td>
+            <td>{{ b.quantity }}</td>
+            <td>{{ b.price }} ₽</td>
+            <td>{{ b.days_until_expiration }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center text-muted">Нет данных</td></tr>
+        {% endfor %}
+    </tbody>
+</table>

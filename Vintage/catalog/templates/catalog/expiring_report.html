@@ -1,0 +1,11 @@
+{% extends 'catalog/base.html' %}
+{% block title %}Отчёт по срокам{% endblock %}
+{% block content %}
+<h1 class="mb-4">📅 Отчёт по срокам годности</h1>
+<h3 class="text-danger">❌ Просрочено</h3>
+{% include 'catalog/_batches_table.html' with batches=expired %}
+<h3 class="text-warning mt-5">⚠️ Истекает скоро</h3>
+{% include 'catalog/_batches_table.html' with batches=expiring_soon %}
+<h3 class="text-success mt-5">✅ Всё в порядке</h3>
+{% include 'catalog/_batches_table.html' with batches=good %}
+{% endblock %}

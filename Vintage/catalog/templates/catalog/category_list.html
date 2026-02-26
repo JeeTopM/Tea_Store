@@ -1,0 +1,23 @@
+{% extends 'catalog/base.html' %}
+{% block title %}Категории{% endblock %}
+{% block content %}
+<h1 class="mb-4">Категории</h1>
+<a href="{% url 'category_create' %}" class="btn btn-primary mb-3">➕ Добавить категорию</a>
+<table class="table table-striped">
+    <thead><tr><th>Название</th><th>Описание</th><th></th></tr></thead>
+    <tbody>
+        {% for category in categories %}
+        <tr>
+            <td>{{ category.name }}</td>
+            <td>{{ category.description }}</td>
+            <td class="text-end">
+                <a href="{% url 'category_update' category.pk %}" class="btn btn-sm btn-warning">✏️</a>
+                <a href="{% url 'category_delete' category.pk %}" class="btn btn-sm btn-danger">🗑️</a>
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" class="text-center text-muted">Нет категорий</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends 'catalog/base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h1>{{ title }}</h1>
+<form method="post" class="card p-4 shadow-sm">
+    {% csrf_token %}
+    <div class="row g-3">
+        <div class="col-md-6">{{ form.product.label_tag }} {{ form.product }}</div>
+        <div class="col-md-6">{{ form.store.label_tag }} {{ form.store }}</div>
+        <div class="col-md-6">{{ form.production_date.label_tag }} {{ form.production_date }}</div>
+        <div class="col-md-6">{{ form.expiration_date.label_tag }} {{ form.expiration_date }}</div>
+        <div class="col-md-6">{{ form.quantity.label_tag }} {{ form.quantity }}</div>
+        <div class="col-md-6">{{ form.price.label_tag }} {{ form.price }}</div>
+        <div class="col-12">{{ form.barcode.label_tag }} {{ form.barcode }}</div>
+        <div class="form-check mt-2">{{ form.is_available }} {{ form.is_available.label_tag }}</div>
+    </div>
+    <div class="mt-4">
+        <button class="btn btn-success">💾 Сохранить</button>
+        <a href="{% url 'batch_list' %}" class="btn btn-secondary">Отмена</a>
+    </div>
+</form>
+{% endblock %}
