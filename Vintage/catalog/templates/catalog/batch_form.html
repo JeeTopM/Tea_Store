@@ -20,3 +20,15 @@
     </div>
 </form>
 {% endblock %}
+
+{% block scripts %}
+<script>
+  $(document).ready(function() {
+      $('.select2').select2({
+          width: '100%',
+          placeholder: 'Начните вводить название товара',
+          allowClear: true
+      });
+  });
+</script>
+{% endblock %}

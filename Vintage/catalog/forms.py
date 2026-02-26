@@ -40,7 +40,7 @@ class ProductBatchForm(forms.ModelForm):
         model = ProductBatch
         fields = ['product', 'store', 'barcode', 'production_date', 'expiration_date', 'quantity', 'price', 'is_available']
         widgets = {
-            'product': forms.Select(attrs={'class': 'form-control'}),
+            'product': forms.Select(attrs={'class': 'form-control select2'}),
             'store': forms.Select(attrs={'class': 'form-control'}),
             'barcode': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '4601234567890'}),
             'production_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
