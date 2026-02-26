@@ -1,39 +1,60 @@
-from django.shortcuts import render, get_object_or_404, redirect
+from datetime import timedelta
+
+from django.conf import settings
 from django.contrib import messages
-from django.db.models import Prefetch
-from .models import Store, ProductCategory, Product, ProductBatch
+from django.db.models import Count, Q
+from django.shortcuts import render, get_object_or_404, redirect
+from django.utils import timezone
+
 from .forms import StoreForm, ProductCategoryForm, ProductForm, ProductBatchForm
+from .models import ProductCategory, Product, ProductBatch
+from .models import Store
 
 
 # --- Главная страница ---
 def home(request):
-    """Главная страница - краткий дашборд по магазинам"""
-    stores = Store.objects.prefetch_related(
-        Prefetch('batches', queryset=ProductBatch.objects.filter(is_available=True))
+    today = timezone.now().date()
+    soon7 = today + timedelta(days=settings.EXPIRING_SOON_DAYS)
+    soon30 = today + timedelta(days=settings.EXPIRING_WARNING_DAYS)
+
+    stores = (
+        Store.objects
+        .annotate(
+            expired_count=Count(
+                "batches",
+                filter=Q(batches__is_available=True, batches__expiration_date__lt=today),
+            ),
+            expiring7_count=Count(
+                "batches",
+                filter=Q(batches__is_available=True, batches__expiration_date__gte=today, batches__expiration_date__lte=soon7),
+            ),
+            expiring30_count=Count(
+                "batches",
+                filter=Q(batches__is_available=True, batches__expiration_date__gt=soon7, batches__expiration_date__lte=soon30),
+            ),
+        )
+        .order_by("name")
     )
 
     store_statuses = []
     for store in stores:
-        batches = store.batches.all()
-        expired = [b for b in batches if b.is_expired]
-        expiring = [b for b in batches if b.is_expiring_soon]
-
-        if expired:
-            status = ('❌ ПРОСРОЧКА', 'bg-danger text-white', len(expired))
-        elif expiring:
-            status = ('⚠️ СКОРО', 'bg-warning', len(expiring))
+        if store.expired_count > 0:
+            status_text, status_class = "❌ ПРОСРОЧКА", "bg-danger text-white"
+        elif store.expiring7_count > 0:
+            status_text, status_class = "⚠️ СКОРО", "bg-warning"
         else:
-            status = ('✅ ВСЁ ОК', 'bg-success text-white', 0)
+            status_text, status_class = "✅ ВСЁ ОК", "bg-success text-white"
 
         store_statuses.append({
-            'store': store,
-            'status_text': status[0],
-            'status_class': status[1],
-            'expired_count': len(expired),
-            'expiring_count': len(expiring),
+            "store": store,
+            "status_text": status_text,
+            "status_class": status_class,
+            "expired_count": store.expired_count,
+            "expiring_count": store.expiring7_count,
+            "warning_count": store.expiring30_count,
         })
 
-    return render(request, 'catalog/home.html', {'store_statuses': store_statuses})
+    return render(request, "catalog/home.html", {"store_statuses": store_statuses})
 
 
 # --- Универсальные CRUD-хелперы ---

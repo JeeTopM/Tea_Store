@@ -1,8 +1,10 @@
+import re
+from datetime import timedelta
+
+from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
-from django.core.exceptions import ValidationError
-from datetime import timedelta
-import re
 
 
 class Store(models.Model):
@@ -55,10 +57,21 @@ class Product(models.Model):
 
 
 class ProductBatchManager(models.Manager):
-    """Кастомный менеджер для фильтров по срокам"""
-    def expiring_soon(self, days=30):
+    def expiring_soon(self, days=None):
+        if days is None:
+            days = settings.EXPIRING_WARNING_DAYS
         today = timezone.now().date()
-        return self.filter(expiration_date__range=[today, today + timedelta(days=days)], is_available=True)
+        return self.filter(
+            expiration_date__range=[today, today + timedelta(days=days)],
+            is_available=True
+        )
+
+    def expiring_critical(self):
+        today = timezone.now().date()
+        return self.filter(
+            expiration_date__range=[today, today + timedelta(days=settings.EXPIRING_SOON_DAYS)],
+            is_available=True
+        )
 
     def expired(self):
         return self.filter(expiration_date__lt=timezone.now().date(), is_available=True)
@@ -105,8 +118,14 @@ class ProductBatch(models.Model):
         return self.days_until_expiration < 0
 
     @property
-    def is_expiring_soon(self):
-        return 0 <= self.days_until_expiration <= 30
+    def is_expiring_critical(self):
+        d = self.days_until_expiration
+        return d is not None and 0 <= d <= settings.EXPIRING_SOON_DAYS
+
+    @property
+    def is_expiring_warning(self):
+        d = self.days_until_expiration
+        return d is not None and 0 <= d <= settings.EXPIRING_WARNING_DAYS
 
     @property
     def total_value(self):

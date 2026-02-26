@@ -1,7 +1,8 @@
+from django.conf import settings
 from django.contrib import admin
 
-# Register your models here.
 from .models import ProductCategory, Product, ProductBatch, Store
+
 
 @admin.register(Store)
 class StoreAdmin(admin.ModelAdmin):
@@ -49,9 +50,9 @@ class ProductBatchAdmin(admin.ModelAdmin):
         days = obj.days_until_expiration
         if days < 0:
             return f"❌ Просрочен ({abs(days)} дн.)"
-        elif days <= 7:
+        elif days <= settings.EXPIRING_SOON_DAYS:
             return f"⚠️ Скоро истекает ({days} дн.)"
-        elif days <= 30:
+        elif days <= settings.EXPIRING_WARNING_DAYS:
             return f"🟡 {days} дн."
         else:
             return f"✅ {days} дн."

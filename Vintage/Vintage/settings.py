@@ -121,3 +121,7 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# --- Tea Store business rules ---
+EXPIRING_SOON_DAYS = 7      # “критично”: скоро истекает
+EXPIRING_WARNING_DAYS = 30  # “внимание”: желтая зона
