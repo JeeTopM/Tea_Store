@@ -12,7 +12,7 @@
     ➕ Добавить партию
 </a>
 
-<h4 class="mb-3">Партии в магазине</h4>
+<h4 class="mb-3">Остатки партий в магазине</h4>
 
 <table class="table table-striped table-hover">
     <thead>
@@ -26,27 +26,25 @@
         </tr>
     </thead>
     <tbody>
-        {% for batch in batches %}
+        {% for stock in stocks %}
         <tr>
-            <td>{{ batch.product.name }}</td>
-            <td>{{ batch.product.category.name }}</td>
+            <td>{{ stock.batch.product.name }}</td>
+            <td>{{ stock.batch.product.category.name }}</td>
             <td>
-                {% if batch.is_expired %}
-                    <span class="text-danger fw-bold">
-                        Просрочен
-                    </span>
+                {% if stock.batch.is_expired %}
+                    <span class="text-danger fw-bold">Просрочен</span>
                 {% else %}
-                    {{ batch.expiration_date }}
+                    {{ stock.batch.expiration_date }}
                 {% endif %}
             </td>
-            <td>{{ batch.quantity }}</td>
-            <td>{{ batch.price }}</td>
+            <td>{{ stock.quantity }}</td>
+            <td>{{ stock.batch.price }}</td>
             <td>
-                <a href="{% url 'batch_update' batch.id %}"
+                <a href="{% url 'batch_update' stock.batch.id %}"
                    class="btn btn-sm btn-outline-primary">
                     ✏️
                 </a>
-                <a href="{% url 'batch_delete' batch.id %}"
+                <a href="{% url 'batch_delete' stock.batch.id %}"
                    class="btn btn-sm btn-outline-danger">
                     🗑
                 </a>
@@ -55,7 +53,7 @@
         {% empty %}
         <tr>
             <td colspan="6" class="text-center text-muted">
-                Нет партий в этом магазине
+                Нет остатков в этом магазине
             </td>
         </tr>
         {% endfor %}

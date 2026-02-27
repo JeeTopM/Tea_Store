@@ -29,19 +29,17 @@ class ProductAdmin(admin.ModelAdmin):
 class ProductBatchAdmin(admin.ModelAdmin):
     list_display = [
         'product',
-        'store',
         'barcode',
         'production_date',
         'expiration_date',
         'days_until_expiration_display',
-        'quantity',
         'price',
         'total_value',
         'is_available'
     ]
-    list_filter = ['store','product__category', 'is_available', 'production_date']
+    list_filter = ['product__category', 'is_available', 'production_date']
     search_fields = ['product__name', 'barcode']
-    list_editable = ['quantity', 'price', 'is_available']
+    list_editable = ['price', 'is_available']
     readonly_fields = ['created_at']
 
     def days_until_expiration_display(self, obj):

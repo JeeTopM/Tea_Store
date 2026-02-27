@@ -80,11 +80,9 @@ class ProductBatchManager(models.Manager):
 class ProductBatch(models.Model):
     """Партии (поставки) товаров"""
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='batches', verbose_name='Продукт')
-    store = models.ForeignKey(Store, on_delete=models.PROTECT, related_name='batches', verbose_name='Магазин')
     barcode = models.CharField(max_length=50, blank=True, null=True, verbose_name='Штрихкод')
     production_date = models.DateField(verbose_name='Дата изготовления')
     expiration_date = models.DateField(verbose_name='Срок годности до')
-    quantity = models.PositiveIntegerField(default=1, verbose_name='Кол-во / Грамм')
     price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Цена')
     is_available = models.BooleanField(default=True, verbose_name='Доступен')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата добавления партии')
@@ -106,7 +104,8 @@ class ProductBatch(models.Model):
             raise ValidationError({'barcode': 'Штрихкод должен содержать только цифры'})
 
     def __str__(self):
-        return f"{self.product.name} ({self.store.name}) — {self.production_date}"
+        bc = f" [{self.barcode}]" if self.barcode else ""
+        return f"{self.product.name}{bc} — {self.production_date} → {self.expiration_date}"
 
     # --- Свойства состояния ---
     @property
@@ -130,3 +129,38 @@ class ProductBatch(models.Model):
     @property
     def total_value(self):
         return self.quantity * self.price
+
+class Stock(models.Model):
+    """Остаток конкретной партии в конкретном магазине"""
+
+    batch = models.ForeignKey(
+        'ProductBatch',
+        on_delete=models.CASCADE,
+        related_name='stocks',
+        verbose_name='Партия'
+    )
+
+    store = models.ForeignKey(
+        Store,
+        on_delete=models.CASCADE,
+        related_name='stocks',
+        verbose_name='Магазин'
+    )
+
+    quantity = models.PositiveIntegerField(
+        default=0,
+        verbose_name='Остаток'
+    )
+
+    class Meta:
+        verbose_name = 'Остаток'
+        verbose_name_plural = 'Остатки'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['batch', 'store'],
+                name='unique_batch_store'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.store.name} — {self.batch} ({self.quantity})"

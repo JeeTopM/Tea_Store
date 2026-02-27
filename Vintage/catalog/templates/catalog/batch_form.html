@@ -1,34 +1,98 @@
 {% extends 'catalog/base.html' %}
 {% block title %}{{ title }}{% endblock %}
+
 {% block content %}
-<h1>{{ title }}</h1>
+<h1 class="mb-4">{{ title }}</h1>
+
 <form method="post" class="card p-4 shadow-sm">
     {% csrf_token %}
+
     <div class="row g-3">
-        <div class="col-md-6">{{ form.product.label_tag }} {{ form.product }}</div>
-        <div class="col-md-6">{{ form.store.label_tag }} {{ form.store }}</div>
-        <div class="col-md-6">{{ form.production_date.label_tag }} {{ form.production_date }}</div>
-        <div class="col-md-6">{{ form.expiration_date.label_tag }} {{ form.expiration_date }}</div>
-        <div class="col-md-6">{{ form.quantity.label_tag }} {{ form.quantity }}</div>
-        <div class="col-md-6">{{ form.price.label_tag }} {{ form.price }}</div>
-        <div class="col-12">{{ form.barcode.label_tag }} {{ form.barcode }}</div>
-        <div class="form-check mt-2">{{ form.is_available }} {{ form.is_available.label_tag }}</div>
+
+        <!-- Товар -->
+        <div class="col-md-6">
+            {{ batch_form.product.label_tag }}
+            {{ batch_form.product }}
+            {% if batch_form.product.errors %}
+                <div class="text-danger small">
+                    {{ batch_form.product.errors }}
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Магазин (из Stock) -->
+        <div class="col-md-6">
+            {{ stock_form.store.label_tag }}
+            {{ stock_form.store }}
+            {% if stock_form.store.errors %}
+                <div class="text-danger small">
+                    {{ stock_form.store.errors }}
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Количество (из Stock) -->
+        <div class="col-md-6">
+            {{ stock_form.quantity.label_tag }}
+            {{ stock_form.quantity }}
+            {% if stock_form.quantity.errors %}
+                <div class="text-danger small">
+                    {{ stock_form.quantity.errors }}
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Цена -->
+        <div class="col-md-6">
+            {{ batch_form.price.label_tag }}
+            {{ batch_form.price }}
+        </div>
+
+        <!-- Дата производства -->
+        <div class="col-md-6">
+            {{ batch_form.production_date.label_tag }}
+            {{ batch_form.production_date }}
+        </div>
+
+        <!-- Срок годности -->
+        <div class="col-md-6">
+            {{ batch_form.expiration_date.label_tag }}
+            {{ batch_form.expiration_date }}
+        </div>
+
+        <!-- Штрихкод -->
+        <div class="col-12">
+            {{ batch_form.barcode.label_tag }}
+            {{ batch_form.barcode }}
+        </div>
+
+        <!-- Доступен -->
+        <div class="form-check mt-3">
+            {{ batch_form.is_available }}
+            {{ batch_form.is_available.label_tag }}
+        </div>
+
     </div>
+
     <div class="mt-4">
-        <button class="btn btn-success">💾 Сохранить</button>
-        <a href="{% url 'batch_list' %}" class="btn btn-secondary">Отмена</a>
+        <button type="submit" class="btn btn-success">
+            💾 Сохранить
+        </button>
+        <a href="{% url 'batch_list' %}" class="btn btn-secondary">
+            Отмена
+        </a>
     </div>
+
 </form>
 {% endblock %}
 
 {% block scripts %}
 <script>
-  $(document).ready(function() {
-      $('.select2').select2({
-          width: '100%',
-          placeholder: 'Начните вводить название товара',
-          allowClear: true
-      });
-  });
+    $(document).ready(function() {
+        $('.select2').select2({
+            width: '100%',
+            placeholder: 'Начните вводить название товара'
+        });
+    });
 </script>
 {% endblock %}

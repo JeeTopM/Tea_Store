@@ -6,10 +6,12 @@ from django.db.models import Count, Q
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils import timezone
 
-from .forms import StoreForm, ProductCategoryForm, ProductForm, ProductBatchForm
-from .models import ProductCategory, Product, ProductBatch
-from .models import Store
+from .forms import StoreForm, ProductCategoryForm, ProductForm, ProductBatchForm, StockForm
+from .models import ProductCategory, Product, ProductBatch, Store, Stock
+from django.forms import inlineformset_factory
 
+
+from django import forms
 
 # --- Главная страница ---
 def home(request):
@@ -21,22 +23,34 @@ def home(request):
         Store.objects
         .annotate(
             expired_count=Count(
-                "batches",
-                filter=Q(batches__is_available=True, batches__expiration_date__lt=today),
+                "stocks",
+                filter=Q(
+                    stocks__quantity__gt=0,
+                    stocks__batch__expiration_date__lt=today
+                ),
             ),
             expiring7_count=Count(
-                "batches",
-                filter=Q(batches__is_available=True, batches__expiration_date__gte=today, batches__expiration_date__lte=soon7),
+                "stocks",
+                filter=Q(
+                    stocks__quantity__gt=0,
+                    stocks__batch__expiration_date__gte=today,
+                    stocks__batch__expiration_date__lte=soon7
+                ),
             ),
             expiring30_count=Count(
-                "batches",
-                filter=Q(batches__is_available=True, batches__expiration_date__gt=soon7, batches__expiration_date__lte=soon30),
+                "stocks",
+                filter=Q(
+                    stocks__quantity__gt=0,
+                    stocks__batch__expiration_date__gt=soon7,
+                    stocks__batch__expiration_date__lte=soon30
+                ),
             ),
         )
         .order_by("name")
     )
 
     store_statuses = []
+
     for store in stores:
         if store.expired_count > 0:
             status_text, status_class = "❌ ПРОСРОЧКА", "bg-danger text-white"
@@ -69,16 +83,16 @@ def handle_form(request, form_class, template, redirect_name, instance=None, tit
 def store_detail(request, pk):
     store = get_object_or_404(Store, pk=pk)
 
-    batches = (
-        ProductBatch.objects
-        .select_related('product__category')
-        .filter(store=store, is_available=True)
-        .order_by('expiration_date')
+    stocks = (
+        Stock.objects
+        .select_related('batch__product__category')
+        .filter(store=store, quantity__gt=0)
+        .order_by('batch__expiration_date')
     )
 
     return render(request, 'catalog/store_detail.html', {
         'store': store,
-        'batches': batches,
+        'stocks': stocks,
     })
 
 # --- Магазины ---
@@ -153,17 +167,70 @@ def product_delete(request, pk):
 
 # --- Партии ---
 def batch_list(request):
-    batches = ProductBatch.objects.select_related('product__category', 'store').order_by('expiration_date')
-    return render(request, 'catalog/batch_list.html', {'batches': batches})
+    stocks = (
+        Stock.objects
+        .select_related('store', 'batch__product__category')
+        .filter(quantity__gt=0)
+        .order_by('batch__expiration_date')
+    )
+    return render(request, 'catalog/batch_list.html', {'stocks': stocks})
 
 
 def batch_create(request):
-    return handle_form(request, ProductBatchForm, 'catalog/batch_form.html', 'batch_list', title='Партия')
+    if request.method == 'POST':
+        batch_form = ProductBatchForm(request.POST)
+        stock_form = StockForm(request.POST)
 
+        if batch_form.is_valid() and stock_form.is_valid():
+            batch = batch_form.save()
+
+            stock = stock_form.save(commit=False)
+            stock.batch = batch
+            stock.save()
+
+            messages.success(request, "Партия успешно создана")
+            return redirect('batch_list')
+    else:
+        batch_form = ProductBatchForm()
+        stock_form = StockForm()
+
+    return render(request, 'catalog/batch_form.html', {
+        'batch_form': batch_form,
+        'stock_form': stock_form,
+        'title': 'Партия'
+    })
 
 def batch_update(request, pk):
-    return handle_form(request, ProductBatchForm, 'catalog/batch_form.html', 'batch_list',
-                       instance=get_object_or_404(ProductBatch, pk=pk), title='Партия')
+    batch = get_object_or_404(ProductBatch, pk=pk)
+
+    # Берём существующий Stock этой партии (если есть).
+    # Если у партии может быть несколько stocks, это временное упрощение:
+    # редактируем первый. Позже сделаем formset аккуратно.
+    stock = Stock.objects.filter(batch=batch).first()
+
+    if request.method == 'POST':
+        batch_form = ProductBatchForm(request.POST, instance=batch)
+        stock_form = StockForm(request.POST, instance=stock)
+
+        if batch_form.is_valid() and stock_form.is_valid():
+            batch = batch_form.save()
+            stock = stock_form.save(commit=False)
+            stock.batch = batch
+            stock.save()
+
+            messages.success(request, "Партия обновлена")
+            return redirect('batch_list')
+    else:
+        batch_form = ProductBatchForm(instance=batch)
+        stock_form = StockForm(instance=stock)
+
+    return render(request, 'catalog/batch_form.html', {
+        'batch_form': batch_form,
+        'stock_form': stock_form,
+        'title': 'Партия',
+        'is_edit': True,
+        'batch': batch,
+    })
 
 
 def batch_delete(request, pk):
@@ -177,12 +244,23 @@ def batch_delete(request, pk):
 
 # --- Отчёт по срокам ---
 def expiring_report(request):
-    expired = ProductBatch.objects.expired()
-    expiring_soon = ProductBatch.objects.expiring_soon()
-    good = ProductBatch.objects.filter(is_available=True).exclude(pk__in=expired | expiring_soon)
+    today = timezone.now().date()
+    soon = today + timedelta(days=settings.EXPIRING_WARNING_DAYS)
+
+    base = (
+        Stock.objects
+        .select_related('store', 'batch__product__category')
+        .filter(quantity__gt=0, batch__is_available=True)
+    )
+
+    expired = base.filter(batch__expiration_date__lt=today).order_by('batch__expiration_date')
+    expiring = base.filter(
+        batch__expiration_date__gte=today,
+        batch__expiration_date__lte=soon
+    ).order_by('batch__expiration_date')
 
     return render(request, 'catalog/expiring_report.html', {
         'expired': expired,
-        'expiring_soon': expiring_soon,
-        'good': good,
+        'expiring': expiring,
+        'soon': soon,
     })

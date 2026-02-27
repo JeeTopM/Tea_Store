@@ -1,8 +1,7 @@
 from django import forms
 from django.utils import timezone
 
-from .models import Store, ProductCategory, Product, ProductBatch
-
+from .models import Store, ProductCategory, Product, ProductBatch, Stock
 
 class StoreForm(forms.ModelForm):
     class Meta:
@@ -10,7 +9,8 @@ class StoreForm(forms.ModelForm):
         fields = ['name', 'address']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Название магазина'}),
-            'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'г. Москва, ул. Примерная, д. 1'}),
+            'address': forms.Textarea(
+                attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'г. Москва, ул. Примерная, д. 1'}),
         }
 
 
@@ -38,14 +38,15 @@ class ProductForm(forms.ModelForm):
 class ProductBatchForm(forms.ModelForm):
     class Meta:
         model = ProductBatch
-        fields = ['product', 'store', 'barcode', 'production_date', 'expiration_date', 'quantity', 'price', 'is_available']
+        fields = [
+            'product', 'barcode', 'production_date', 'expiration_date',
+            'price', 'is_available',
+        ]
         widgets = {
-            'product': forms.Select(attrs={'class': 'form-control select2'}),
-            'store': forms.Select(attrs={'class': 'form-control'}),
+            'product': forms.Select(attrs={'class': 'form-select select2'}),
             'barcode': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '4601234567890'}),
             'production_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'expiration_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'quantity': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
             'price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': 0}),
             'is_available': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
@@ -68,3 +69,12 @@ class ProductBatchForm(forms.ModelForm):
             self.add_error('production_date', 'Дата изготовления не может быть в будущем')
 
         return cleaned_data
+
+class StockForm(forms.ModelForm):
+    class Meta:
+        model = Stock
+        fields = ['store', 'quantity']
+        widgets = {
+            'store': forms.Select(attrs={'class': 'form-select'}),
+            'quantity': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+        }

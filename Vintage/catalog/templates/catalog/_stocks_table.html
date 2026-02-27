@@ -1,9 +1,3 @@
-{% extends 'catalog/base.html' %}
-{% block title %}Партии{% endblock %}
-{% block content %}
-<h1 class="mb-4">Партии товаров</h1>
-<a href="{% url 'batch_create' %}" class="btn btn-primary mb-3">➕ Добавить партию</a>
-
 <table class="table table-striped table-sm">
   <thead>
     <tr>
@@ -37,8 +31,7 @@
     </tr>
     {% endwith %}
     {% empty %}
-    <tr><td colspan="8" class="text-center text-muted">Нет партий</td></tr>
+    <tr><td colspan="8" class="text-center text-muted">Нет записей</td></tr>
     {% endfor %}
   </tbody>
 </table>
-{% endblock %}
