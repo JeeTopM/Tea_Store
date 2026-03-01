@@ -2,8 +2,9 @@ import re
 from datetime import timedelta
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 
@@ -144,6 +145,7 @@ class ProductBatch(models.Model):
     def total_value(self):
         return self.quantity * self.price
 
+
 class Stock(models.Model):
     """Остаток конкретной партии в конкретном магазине"""
 
@@ -178,3 +180,81 @@ class Stock(models.Model):
 
     def __str__(self):
         return f"{self.store.name} — {self.batch} ({self.quantity})"
+
+
+User = get_user_model()
+
+
+class StockMovement(models.Model):
+    """Журнал движений остатков (приход/списание/резерв/возврат)"""
+
+    REASON_IN = "IN"
+    REASON_OUT = "OUT"
+    REASON_RESERVE_GIFT = "RESERVE_GIFT"
+    REASON_RETURN_GIFT = "RETURN_GIFT"
+    REASON_ADJUST = "ADJUST"
+
+    REASON_CHOICES = [
+        (REASON_IN, "Корректировка (+"),
+        (REASON_OUT, "Корректировка (-)"),
+        (REASON_RESERVE_GIFT, "Резерв в подарок"),
+        (REASON_RETURN_GIFT, "Возврат из подарка"),
+        (REASON_ADJUST, "Корректировка"),
+    ]
+
+    stock = models.ForeignKey(
+        "Stock",
+        on_delete=models.PROTECT,
+        related_name="movements",
+        verbose_name="Остаток (партия+магазин)",
+    )
+
+    # delta: +N увеличивает остаток, -N уменьшает
+    delta = models.IntegerField(verbose_name="Изменение (дельта)")
+
+    reason = models.CharField(max_length=20, choices=REASON_CHOICES, verbose_name="Причина")
+
+    comment = models.CharField(max_length=255, blank=True, default="", verbose_name="Комментарий")
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="stock_movements",
+        verbose_name="Кто сделал",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Когда")
+
+    class Meta:
+        verbose_name = "Движение остатка"
+        verbose_name_plural = "Движения остатков"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        sign = "+" if self.delta >= 0 else ""
+        return f"{self.stock} {sign}{self.delta} ({self.get_reason_display()})"
+
+def apply_stock_movement(*, stock: Stock, delta: int, reason: str, user=None, comment: str = "") -> StockMovement:
+    if delta == 0:
+        raise ValidationError("Дельта не может быть 0")
+
+    with transaction.atomic():
+        stock_locked = Stock.objects.select_for_update().get(pk=stock.pk)
+
+        new_qty = stock_locked.quantity + delta
+        if new_qty < 0:
+            raise ValidationError(f"Недостаточно остатка. Сейчас {stock_locked.quantity}, пытаешься изменить на {delta}.")
+
+        stock_locked.quantity = new_qty
+        stock_locked.save(update_fields=["quantity"])
+
+        movement = StockMovement.objects.create(
+            stock=stock_locked,
+            delta=delta,
+            reason=reason,
+            created_by=user if (user and getattr(user, "is_authenticated", False)) else None,
+            comment=comment,
+        )
+        return movement

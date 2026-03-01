@@ -2,16 +2,14 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.db.models import Count, Q
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils import timezone
 
-from .forms import StoreForm, ProductCategoryForm, ProductForm, ProductBatchForm, StockForm
-from .models import ProductCategory, Product, ProductBatch, Store, Stock
-from django.forms import inlineformset_factory
+from .forms import StoreForm, ProductCategoryForm, ProductForm, ProductBatchForm, StockForm, StockMovementForm
+from .models import ProductCategory, Product, ProductBatch, Store, Stock, StockMovement, apply_stock_movement
 
-
-from django import forms
 
 # --- Главная страница ---
 def home(request):
@@ -263,4 +261,49 @@ def expiring_report(request):
         'expired': expired,
         'expiring': expiring,
         'soon': soon,
+    })
+
+def stock_move(request, stock_id, action):
+    stock = get_object_or_404(
+        Stock.objects.select_related("store", "batch__product"),
+        pk=stock_id
+    )
+
+    action_map = {
+        "in":  (StockMovement.REASON_IN, +1, "Корректировка ➕"),
+        "out": (StockMovement.REASON_OUT, -1, "Корректировка ➖"),
+        "reserve": (StockMovement.REASON_RESERVE_GIFT, -1, "🎁 Резерв в подарок"),
+        "return":  (StockMovement.REASON_RETURN_GIFT, +1, "↩️ Возврат из подарка"),
+    }
+
+    if action not in action_map:
+        return redirect("store_detail", pk=stock.store_id)
+
+    reason, sign, title = action_map[action]
+
+    if request.method == "POST":
+        form = StockMovementForm(request.POST)
+        if form.is_valid():
+            qty = form.cleaned_data["quantity"]
+            comment = form.cleaned_data["comment"]
+            delta = sign * qty
+            try:
+                apply_stock_movement(
+                    stock=stock,
+                    delta=delta,
+                    reason=reason,
+                    user=request.user,
+                    comment=comment,
+                )
+                messages.success(request, f"{title}: выполнено")
+                return redirect("store_detail", pk=stock.store_id)
+            except ValidationError as e:
+                form.add_error(None, e.message)
+    else:
+        form = StockMovementForm()
+
+    return render(request, "catalog/stock_move_form.html", {
+        "form": form,
+        "stock": stock,
+        "title": title,
     })

@@ -40,14 +40,12 @@
             <td>{{ stock.quantity }} {{ stock.batch.product.get_unit_display }}</td>
             <td>{{ stock.batch.price }}</td>
             <td>
-                <a href="{% url 'batch_update' stock.batch.id %}"
-                   class="btn btn-sm btn-outline-primary">
-                    ✏️
-                </a>
-                <a href="{% url 'batch_delete' stock.batch.id %}"
-                   class="btn btn-sm btn-outline-danger">
-                    🗑
-                </a>
+                <a href="{% url 'batch_update' stock.batch.id %}" class="btn btn-sm btn-outline-primary">✏️</a>
+                <a href="{% url 'batch_delete' stock.batch.id %}" class="btn btn-sm btn-outline-danger">🗑</a>
+                <a class="btn btn-sm btn-success" href="{% url 'stock_move' stock.id 'in' %}">Корр. ➕</a>
+                <a class="btn btn-sm btn-danger" href="{% url 'stock_move' stock.id 'out' %}">Корр. ➖</a>
+                <a class="btn btn-sm btn-warning" href="{% url 'stock_move' stock.id 'reserve' %}">🎁</a>
+                <a class="btn btn-sm btn-secondary" href="{% url 'stock_move' stock.id 'return' %}">↩️</a>
             </td>
         </tr>
         {% empty %}

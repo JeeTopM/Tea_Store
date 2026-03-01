@@ -32,4 +32,8 @@ urlpatterns = [
 
     # Отчёт
     path('report/', views.expiring_report, name='expiring_report'),
+
+    # Движения товаров
+    path("stocks/<int:stock_id>/<str:action>/", views.stock_move, name="stock_move"),
+
 ]

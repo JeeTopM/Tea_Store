@@ -1,0 +1,29 @@
+{% extends 'catalog/base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h1 class="mb-4">{{ title }}</h1>
+
+<div class="mb-3">
+  <div><b>Магазин:</b> {{ stock.store.name }}</div>
+  <div><b>Продукт:</b> {{ stock.batch.product.name }}</div>
+  <div><b>Партия:</b> {{ stock.batch.production_date }} → {{ stock.batch.expiration_date }}</div>
+  <div><b>Текущий остаток:</b> {{ stock.quantity }} {{ stock.batch.product.get_unit_display }}</div>
+</div>
+
+<form method="post" class="card card-body" style="max-width: 520px;">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  <div class="mb-3">
+    {{ form.quantity.label_tag }}
+    {{ form.quantity }}
+    {{ form.quantity.errors }}
+  </div>
+  <div class="mb-3">
+    {{ form.comment.label_tag }}
+    {{ form.comment }}
+    {{ form.comment.errors }}
+  </div>
+  <button type="submit" class="btn btn-primary">Сохранить</button>
+  <a href="{% url 'store_detail' stock.store.pk %}" class="btn btn-link">Отмена</a>
+</form>
+{% endblock %}

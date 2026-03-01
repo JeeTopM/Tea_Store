@@ -1,7 +1,8 @@
 from django import forms
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 
-from .models import Store, ProductCategory, Product, ProductBatch, Stock
+from .models import Store, ProductCategory, Product, ProductBatch, Stock, StockMovement
 
 class StoreForm(forms.ModelForm):
     class Meta:
@@ -79,3 +80,7 @@ class StockForm(forms.ModelForm):
             'store': forms.Select(attrs={'class': 'form-select'}),
             'quantity': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
         }
+
+class StockMovementForm(forms.Form):
+    quantity = forms.IntegerField(min_value=1, label="Количество", widget=forms.NumberInput(attrs={"class": "form-control"}))
+    comment = forms.CharField(required=False, label="Комментарий", widget=forms.TextInput(attrs={"class": "form-control"}))
