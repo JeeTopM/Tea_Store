@@ -36,6 +36,14 @@ class ProductCategory(models.Model):
 
 class Product(models.Model):
     """Продукт"""
+    UNIT_G = "g"
+    UNIT_PCS = "pcs"
+
+    UNIT_CHOICES = [
+        (UNIT_G, "г"),
+        (UNIT_PCS, "шт"),
+    ]
+
     name = models.CharField(max_length=100, verbose_name='Название')
     description = models.TextField(null=True, blank=True, verbose_name='Описание')
     category = models.ForeignKey(
@@ -43,6 +51,12 @@ class Product(models.Model):
         on_delete=models.PROTECT,
         verbose_name='Категория',
         related_name='products'
+    )
+    unit = models.CharField(
+        max_length=10,
+        choices=UNIT_CHOICES,
+        default=UNIT_PCS,
+        verbose_name="Ед. изм."
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
 

@@ -37,7 +37,7 @@
                     {{ stock.batch.expiration_date }}
                 {% endif %}
             </td>
-            <td>{{ stock.quantity }}</td>
+            <td>{{ stock.quantity }} {{ stock.batch.product.get_unit_display }}</td>
             <td>{{ stock.batch.price }}</td>
             <td>
                 <a href="{% url 'batch_update' stock.batch.id %}"

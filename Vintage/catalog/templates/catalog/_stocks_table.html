@@ -20,7 +20,7 @@
       <td>{{ s.store.name }}</td>
       <td>{{ b.production_date }}</td>
       <td>{{ b.expiration_date }}</td>
-      <td>{{ s.quantity }}</td>
+      <td>{{ s.quantity }} {{ s.batch.product.get_unit_display }}</td>
       <td>{{ b.price }} ₽</td>
       <td>{% if b.is_available %}✅{% else %}❌{% endif %}</td>
 
