@@ -2,7 +2,7 @@ from django import forms
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 
-from .models import Store, ProductCategory, Product, ProductBatch, Stock, StockMovement
+from .models import Store, ProductCategory, Product, ProductBatch, Stock, StockMovement, Gift
 
 class StoreForm(forms.ModelForm):
     class Meta:
@@ -84,3 +84,68 @@ class StockForm(forms.ModelForm):
 class StockMovementForm(forms.Form):
     quantity = forms.IntegerField(min_value=1, label="Количество", widget=forms.NumberInput(attrs={"class": "form-control"}))
     comment = forms.CharField(required=False, label="Комментарий", widget=forms.TextInput(attrs={"class": "form-control"}))
+
+class GiftForm(forms.ModelForm):
+    class Meta:
+        model = Gift
+        fields = ["store", "note"]
+        widgets = {
+            "store": forms.Select(attrs={"class": "form-control"}),
+            "note": forms.TextInput(attrs={"class": "form-control"}),
+        }
+
+
+class GiftAddStockItemForm(forms.Form):
+    stock = forms.ModelChoiceField(
+        queryset=Stock.objects.none(),
+        label="Остаток (партия в магазине)",
+        widget=forms.Select(attrs={"class": "form-control select2"}),
+    )
+    quantity = forms.IntegerField(
+        min_value=1,
+        label="Количество",
+        widget=forms.NumberInput(attrs={"class": "form-control"}),
+    )
+    note = forms.CharField(
+        required=False,
+        label="Комментарий",
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+
+    def __init__(self, *args, store=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        qs = (
+            Stock.objects
+            .select_related("store", "batch__product__category")
+            .filter(quantity__gt=0)
+            .order_by("batch__product__category__name", "batch__product__name", "batch__expiration_date")
+        )
+        if store is not None:
+            qs = qs.filter(store=store)
+
+        self.fields["stock"].queryset = qs
+
+        # Читаемая подпись в выпадающем списке
+        def _label(obj: Stock):
+            p = obj.batch.product
+            unit = p.get_unit_display() if hasattr(p, "get_unit_display") else ""
+            cat = getattr(p.category, "name", "")
+            return f"{cat} — {p.name} | до {obj.batch.expiration_date} | остаток {obj.quantity} {unit}"
+
+        self.fields["stock"].label_from_instance = _label
+
+
+class GiftCreateForStoreForm(forms.ModelForm):
+    class Meta:
+        model = Gift
+        fields = ["note"]
+        widgets = {
+            "note": forms.TextInput(attrs={"class": "form-control"}),
+        }
+
+class GiftAddExtraItemForm(forms.Form):
+    extra_name = forms.CharField(label="Название", widget=forms.TextInput(attrs={"class": "form-control"}))
+    quantity = forms.IntegerField(min_value=1, label="Количество", widget=forms.NumberInput(attrs={"class": "form-control"}))
+    note = forms.CharField(required=False, label="Комментарий", widget=forms.TextInput(attrs={"class": "form-control"}))
+

@@ -2,13 +2,17 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils import timezone
 
-from .forms import StoreForm, ProductCategoryForm, ProductForm, ProductBatchForm, StockForm, StockMovementForm
-from .models import ProductCategory, Product, ProductBatch, Store, Stock, StockMovement, apply_stock_movement
+from .forms import StoreForm, ProductCategoryForm, ProductForm, ProductBatchForm, StockForm, StockMovementForm, \
+    GiftForm, GiftAddStockItemForm, GiftAddExtraItemForm, GiftCreateForStoreForm
+from .models import ProductCategory, Product, ProductBatch, Store, Stock, StockMovement, apply_stock_movement, Gift, \
+    GiftItem
 
 
 # --- Главная страница ---
@@ -272,8 +276,6 @@ def stock_move(request, stock_id, action):
     action_map = {
         "in":  (StockMovement.REASON_IN, +1, "Корректировка ➕"),
         "out": (StockMovement.REASON_OUT, -1, "Корректировка ➖"),
-        "reserve": (StockMovement.REASON_RESERVE_GIFT, -1, "🎁 Резерв в подарок"),
-        "return":  (StockMovement.REASON_RETURN_GIFT, +1, "↩️ Возврат из подарка"),
     }
 
     if action not in action_map:
@@ -306,4 +308,182 @@ def stock_move(request, stock_id, action):
         "form": form,
         "stock": stock,
         "title": title,
+    })
+@login_required
+
+def gift_list(request):
+    gifts = Gift.objects.select_related("store", "created_by").all()
+    return render(request, "catalog/gift_list.html", {"gifts": gifts})
+
+@login_required
+
+def gift_create(request):
+    if request.method == "POST":
+        form = GiftForm(request.POST)
+        if form.is_valid():
+            gift = form.save(commit=False)
+            gift.created_by = request.user
+            gift.save()
+            messages.success(request, "Подарок создан")
+            return redirect("gift_detail", pk=gift.pk)
+    else:
+        form = GiftForm()
+    return render(request, "catalog/gift_form.html", {"form": form, "title": "Новый подарок"})
+
+@login_required
+
+def gift_detail(request, pk):
+    gift = get_object_or_404(Gift.objects.select_related("store", "created_by"), pk=pk)
+    items = gift.items.select_related("stock__batch__product", "stock__store").all()
+
+    return render(request, "catalog/gift_detail.html", {
+        "gift": gift,
+        "items": items,
+        "stock_form": GiftAddStockItemForm(store=gift.store),
+        "extra_form": GiftAddExtraItemForm(),
+    })
+
+@login_required
+def gift_add_stock_item(request, pk):
+    gift = get_object_or_404(Gift.objects.select_related("store"), pk=pk)
+
+    if request.method != "POST":
+        return redirect("gift_detail", pk=gift.pk)
+
+    form = GiftAddStockItemForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Ошибка формы")
+        return redirect("gift_detail", pk=gift.pk)
+
+    stock = form.cleaned_data["stock"]
+    qty = form.cleaned_data["quantity"]
+    note = form.cleaned_data["note"]
+
+    # Проверяем, что остаток из того же магазина
+    if stock.store_id != gift.store_id:
+        messages.error(request, "Нельзя добавлять остаток из другого магазина.")
+        return redirect("gift_detail", pk=gift.pk)
+
+    try:
+        with transaction.atomic():
+            # Резервируем (уменьшаем остаток)
+            apply_stock_movement(
+                stock=stock,
+                delta=-qty,
+                reason=StockMovement.REASON_RESERVE_GIFT,
+                user=request.user,
+                comment=f"Подарок #{gift.pk}. {note}".strip(),
+            )
+            GiftItem.objects.create(
+                gift=gift,
+                stock=stock,
+                quantity=qty,
+                note=note,
+            )
+        messages.success(request, "Добавлено в подарок (резерв создан)")
+    except ValidationError as e:
+        messages.error(request, e.message)
+
+    return redirect("gift_detail", pk=gift.pk)
+
+@login_required
+def gift_add_extra_item(request, pk):
+    gift = get_object_or_404(Gift, pk=pk)
+
+    if request.method != "POST":
+        return redirect("gift_detail", pk=gift.pk)
+
+    form = GiftAddExtraItemForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Ошибка формы")
+        return redirect("gift_detail", pk=gift.pk)
+
+    GiftItem.objects.create(
+        gift=gift,
+        extra_name=form.cleaned_data["extra_name"],
+        quantity=form.cleaned_data["quantity"],
+        note=form.cleaned_data["note"],
+    )
+    messages.success(request, "Дополнительная позиция добавлена")
+    return redirect("gift_detail", pk=gift.pk)
+
+@login_required
+def gift_remove_item(request, pk, item_id):
+    gift = get_object_or_404(Gift, pk=pk)
+    item = get_object_or_404(GiftItem.objects.select_related("stock"), pk=item_id, gift=gift)
+
+    if request.method != "POST":
+        return redirect("gift_detail", pk=gift.pk)
+
+    try:
+        with transaction.atomic():
+            # Если позиция со склада — возвращаем резерв обратно
+            if item.stock_id:
+                apply_stock_movement(
+                    stock=item.stock,
+                    delta=+item.quantity,
+                    reason=StockMovement.REASON_RETURN_GIFT,
+                    user=request.user,
+                    comment=f"Удаление из подарка #{gift.pk}. {item.note}".strip(),
+                )
+            item.delete()
+        messages.success(request, "Позиция удалена")
+    except ValidationError as e:
+        messages.error(request, e.message)
+
+    return redirect("gift_detail", pk=gift.pk)
+
+@login_required
+def gift_cancel(request, pk):
+    gift = get_object_or_404(Gift, pk=pk)
+
+    if request.method != "POST":
+        return redirect("gift_detail", pk=gift.pk)
+
+    # Возвращаем всё, что было зарезервировано со склада
+    items = gift.items.select_related("stock").all()
+
+    try:
+        with transaction.atomic():
+            for item in items:
+                if item.stock_id:
+                    apply_stock_movement(
+                        stock=item.stock,
+                        delta=+item.quantity,
+                        reason=StockMovement.REASON_RETURN_GIFT,
+                        user=request.user,
+                        comment=f"Отмена/разбор подарка #{gift.pk}",
+                    )
+            gift.status = Gift.STATUS_CANCELED
+            gift.save(update_fields=["status"])
+        messages.success(request, "Подарок отменён, резерв возвращён")
+    except ValidationError as e:
+        messages.error(request, e.message)
+
+    return redirect("gift_detail", pk=gift.pk)
+
+from django.contrib.auth.decorators import login_required
+
+
+@login_required
+def gift_create_for_store(request, store_pk):
+    store = get_object_or_404(Store, pk=store_pk)
+
+    if request.method == "POST":
+        form = GiftCreateForStoreForm(request.POST)
+        if form.is_valid():
+            gift = form.save(commit=False)
+            gift.store = store
+            gift.created_by = request.user
+            gift.save()
+            messages.success(request, "Подарок создан")
+            return redirect("gift_detail", pk=gift.pk)
+    else:
+        form = GiftCreateForStoreForm()
+
+    return render(request, "catalog/gift_form.html", {
+        "form": form,
+        "title": f"Новый подарок — {store.name}",
+        "store_locked": True,
+        "store": store,
     })

@@ -1,0 +1,29 @@
+{% extends 'catalog/base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h1 class="mb-4">{{ title }}</h1>
+
+<form method="post" class="card card-body" style="max-width: 640px;">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+
+  {% if store_locked %}
+    <div class="mb-3">
+      <label class="form-label">Магазин</label>
+      <input class="form-control" value="{{ store.name }}" disabled>
+    </div>
+  {% else %}
+    <div class="mb-3">
+      {{ form.store.label_tag }} {{ form.store }}
+      {{ form.store.errors }}
+    </div>
+  {% endif %}
+
+  <div class="mb-3">
+    {{ form.note.label_tag }} {{ form.note }}
+    {{ form.note.errors }}
+  </div>
+
+  <button class="btn btn-primary" type="submit">Создать</button>
+</form>
+{% endblock %}

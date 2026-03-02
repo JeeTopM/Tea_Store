@@ -211,11 +211,8 @@ class StockMovement(models.Model):
 
     # delta: +N увеличивает остаток, -N уменьшает
     delta = models.IntegerField(verbose_name="Изменение (дельта)")
-
     reason = models.CharField(max_length=20, choices=REASON_CHOICES, verbose_name="Причина")
-
     comment = models.CharField(max_length=255, blank=True, default="", verbose_name="Комментарий")
-
     created_by = models.ForeignKey(
         User,
         on_delete=models.PROTECT,
@@ -236,6 +233,7 @@ class StockMovement(models.Model):
         sign = "+" if self.delta >= 0 else ""
         return f"{self.stock} {sign}{self.delta} ({self.get_reason_display()})"
 
+
 def apply_stock_movement(*, stock: Stock, delta: int, reason: str, user=None, comment: str = "") -> StockMovement:
     if delta == 0:
         raise ValidationError("Дельта не может быть 0")
@@ -245,7 +243,8 @@ def apply_stock_movement(*, stock: Stock, delta: int, reason: str, user=None, co
 
         new_qty = stock_locked.quantity + delta
         if new_qty < 0:
-            raise ValidationError(f"Недостаточно остатка. Сейчас {stock_locked.quantity}, пытаешься изменить на {delta}.")
+            raise ValidationError(
+                f"Недостаточно остатка. Сейчас {stock_locked.quantity}, пытаешься изменить на {delta}.")
 
         stock_locked.quantity = new_qty
         stock_locked.save(update_fields=["quantity"])
@@ -258,3 +257,84 @@ def apply_stock_movement(*, stock: Stock, delta: int, reason: str, user=None, co
             comment=comment,
         )
         return movement
+
+
+class Gift(models.Model):
+    STATUS_DRAFT = "DRAFT"
+    STATUS_ASSEMBLED = "ASSEMBLED"
+    STATUS_SOLD = "SOLD"
+    STATUS_CANCELED = "CANCELED"
+
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, "Черновик"),
+        (STATUS_ASSEMBLED, "Собран"),
+        (STATUS_SOLD, "Продан"),
+        (STATUS_CANCELED, "Отменён/Разобран"),
+    ]
+
+    store = models.ForeignKey(
+        Store,
+        on_delete=models.PROTECT,
+        related_name="gifts",
+        verbose_name="Магазин",
+    )
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="gifts_created",
+        verbose_name="Кто собрал",
+    )
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT, verbose_name="Статус")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Создан")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Обновлён")
+
+    note = models.CharField(max_length=255, blank=True, default="", verbose_name="Комментарий")
+
+    class Meta:
+        verbose_name = "Подарок"
+        verbose_name_plural = "Подарки"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Подарок #{self.pk} — {self.store.name} — {self.get_status_display()}"
+
+
+class GiftItem(models.Model):
+    gift = models.ForeignKey(Gift, on_delete=models.CASCADE, related_name="items", verbose_name="Подарок")
+
+    # Если позиция из склада — указываем конкретный Stock (партия+магазин)
+    stock = models.ForeignKey(
+        Stock,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="gift_items",
+        verbose_name="Со склада",
+    )
+
+    # Если позиция “дополнительно” — просто текст
+    extra_name = models.CharField(max_length=150, blank=True, default="", verbose_name="Дополнительно (название)")
+    quantity = models.PositiveIntegerField(verbose_name="Количество")
+    note = models.CharField(max_length=255, blank=True, default="", verbose_name="Комментарий")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Добавлено")
+
+    class Meta:
+        verbose_name = "Позиция подарка"
+        verbose_name_plural = "Позиции подарка"
+        ordering = ["created_at"]
+
+    def clean(self):
+        # Либо stock, либо extra_name
+        if not self.stock and not self.extra_name:
+            raise ValidationError("Укажите либо товар со склада, либо 'дополнительно'.")
+
+        if self.stock and self.extra_name:
+            raise ValidationError("Нельзя одновременно указать склад и 'дополнительно'.")
+
+    def __str__(self):
+        if self.stock:
+            p = self.stock.batch.product
+            return f"{p.name} — {self.quantity} {p.get_unit_display()}"
+        return f"{self.extra_name} — {self.quantity}"

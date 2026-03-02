@@ -36,4 +36,13 @@ urlpatterns = [
     # Движения товаров
     path("stocks/<int:stock_id>/<str:action>/", views.stock_move, name="stock_move"),
 
+    # Подарки
+    path("gifts/", views.gift_list, name="gift_list"),
+    path("gifts/add/", views.gift_create, name="gift_create"),
+    path("gifts/<int:pk>/", views.gift_detail, name="gift_detail"),
+    path("gifts/<int:pk>/add-stock/", views.gift_add_stock_item, name="gift_add_stock_item"),
+    path("gifts/<int:pk>/add-extra/", views.gift_add_extra_item, name="gift_add_extra_item"),
+    path("gifts/<int:pk>/items/<int:item_id>/delete/", views.gift_remove_item, name="gift_remove_item"),
+    path("gifts/<int:pk>/cancel/", views.gift_cancel, name="gift_cancel"),
+    path("stores/<int:store_pk>/gifts/add/", views.gift_create_for_store, name="gift_create_for_store"),
 ]

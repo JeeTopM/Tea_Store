@@ -125,3 +125,5 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # --- Tea Store business rules ---
 EXPIRING_SOON_DAYS = 7      # “критично”: скоро истекает
 EXPIRING_WARNING_DAYS = 30  # “внимание”: желтая зона
+
+LOGIN_URL = "/admin/login/"
