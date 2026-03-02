@@ -1,7 +1,6 @@
 from django import forms
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-
 from .models import Store, ProductCategory, Product, ProductBatch, Stock, StockMovement, Gift
 
 class StoreForm(forms.ModelForm):
@@ -149,3 +148,11 @@ class GiftAddExtraItemForm(forms.Form):
     quantity = forms.IntegerField(min_value=1, label="Количество", widget=forms.NumberInput(attrs={"class": "form-control"}))
     note = forms.CharField(required=False, label="Комментарий", widget=forms.TextInput(attrs={"class": "form-control"}))
 
+class GiftSellForm(forms.Form):
+    sale_price = forms.DecimalField(
+        min_value=0,
+        decimal_places=2,
+        max_digits=10,
+        label="Цена продажи",
+        widget=forms.NumberInput(attrs={"class": "form-control"}),
+    )

@@ -10,7 +10,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.utils import timezone
 
 from .forms import StoreForm, ProductCategoryForm, ProductForm, ProductBatchForm, StockForm, StockMovementForm, \
-    GiftForm, GiftAddStockItemForm, GiftAddExtraItemForm, GiftCreateForStoreForm
+    GiftForm, GiftAddStockItemForm, GiftAddExtraItemForm, GiftCreateForStoreForm, GiftSellForm
 from .models import ProductCategory, Product, ProductBatch, Store, Stock, StockMovement, apply_stock_movement, Gift, \
     GiftItem
 
@@ -82,6 +82,7 @@ def handle_form(request, form_class, template, redirect_name, instance=None, tit
         return redirect(redirect_name)
     return render(request, template, {'form': form, 'title': title})
 
+
 def store_detail(request, pk):
     store = get_object_or_404(Store, pk=pk)
 
@@ -96,6 +97,7 @@ def store_detail(request, pk):
         'store': store,
         'stocks': stocks,
     })
+
 
 # --- Магазины ---
 def store_list(request):
@@ -202,6 +204,7 @@ def batch_create(request):
         'title': 'Партия'
     })
 
+
 def batch_update(request, pk):
     batch = get_object_or_404(ProductBatch, pk=pk)
 
@@ -267,6 +270,7 @@ def expiring_report(request):
         'soon': soon,
     })
 
+
 def stock_move(request, stock_id, action):
     stock = get_object_or_404(
         Stock.objects.select_related("store", "batch__product"),
@@ -274,7 +278,7 @@ def stock_move(request, stock_id, action):
     )
 
     action_map = {
-        "in":  (StockMovement.REASON_IN, +1, "Корректировка ➕"),
+        "in": (StockMovement.REASON_IN, +1, "Корректировка ➕"),
         "out": (StockMovement.REASON_OUT, -1, "Корректировка ➖"),
     }
 
@@ -309,14 +313,15 @@ def stock_move(request, stock_id, action):
         "stock": stock,
         "title": title,
     })
-@login_required
 
+
+@login_required
 def gift_list(request):
     gifts = Gift.objects.select_related("store", "created_by").all()
     return render(request, "catalog/gift_list.html", {"gifts": gifts})
 
-@login_required
 
+@login_required
 def gift_create(request):
     if request.method == "POST":
         form = GiftForm(request.POST)
@@ -330,8 +335,8 @@ def gift_create(request):
         form = GiftForm()
     return render(request, "catalog/gift_form.html", {"form": form, "title": "Новый подарок"})
 
-@login_required
 
+@login_required
 def gift_detail(request, pk):
     gift = get_object_or_404(Gift.objects.select_related("store", "created_by"), pk=pk)
     items = gift.items.select_related("stock__batch__product", "stock__store").all()
@@ -342,6 +347,14 @@ def gift_detail(request, pk):
         "stock_form": GiftAddStockItemForm(store=gift.store),
         "extra_form": GiftAddExtraItemForm(),
     })
+
+
+def ensure_gift_editable(request, gift):
+    if gift.status in (Gift.STATUS_SOLD, Gift.STATUS_CANCELED):
+        messages.error(request, "Нельзя изменять проданный/отменённый подарок.")
+        return False
+    return True
+
 
 @login_required
 def gift_add_stock_item(request, pk):
@@ -358,6 +371,10 @@ def gift_add_stock_item(request, pk):
     stock = form.cleaned_data["stock"]
     qty = form.cleaned_data["quantity"]
     note = form.cleaned_data["note"]
+
+    # Запрещаем редактировать после продажи
+    if not ensure_gift_editable(request, gift):
+        return redirect("gift_detail", pk=gift.pk)
 
     # Проверяем, что остаток из того же магазина
     if stock.store_id != gift.store_id:
@@ -386,6 +403,7 @@ def gift_add_stock_item(request, pk):
 
     return redirect("gift_detail", pk=gift.pk)
 
+
 @login_required
 def gift_add_extra_item(request, pk):
     gift = get_object_or_404(Gift, pk=pk)
@@ -398,6 +416,10 @@ def gift_add_extra_item(request, pk):
         messages.error(request, "Ошибка формы")
         return redirect("gift_detail", pk=gift.pk)
 
+    # Запрещаем редактировать после продажи
+    if not ensure_gift_editable(request, gift):
+        return redirect("gift_detail", pk=gift.pk)
+
     GiftItem.objects.create(
         gift=gift,
         extra_name=form.cleaned_data["extra_name"],
@@ -406,6 +428,7 @@ def gift_add_extra_item(request, pk):
     )
     messages.success(request, "Дополнительная позиция добавлена")
     return redirect("gift_detail", pk=gift.pk)
+
 
 @login_required
 def gift_remove_item(request, pk, item_id):
@@ -431,7 +454,12 @@ def gift_remove_item(request, pk, item_id):
     except ValidationError as e:
         messages.error(request, e.message)
 
+    # Запрещаем редактировать после продажи
+    if not ensure_gift_editable(request, gift):
+        return redirect("gift_detail", pk=gift.pk)
+
     return redirect("gift_detail", pk=gift.pk)
+
 
 @login_required
 def gift_cancel(request, pk):
@@ -460,7 +488,12 @@ def gift_cancel(request, pk):
     except ValidationError as e:
         messages.error(request, e.message)
 
+    # Запрещаем редактировать после продажи
+    if not ensure_gift_editable(request, gift):
+        return redirect("gift_detail", pk=gift.pk)
+
     return redirect("gift_detail", pk=gift.pk)
+
 
 from django.contrib.auth.decorators import login_required
 
@@ -487,3 +520,35 @@ def gift_create_for_store(request, store_pk):
         "store_locked": True,
         "store": store,
     })
+
+
+@login_required
+def gift_sell(request, pk):
+    gift = get_object_or_404(Gift, pk=pk)
+
+    if gift.status == Gift.STATUS_SOLD:
+        messages.error(request, "Подарок уже продан.")
+        return redirect("gift_detail", pk=gift.pk)
+
+    if gift.status == Gift.STATUS_CANCELED:
+        messages.error(request, "Подарок отменён.")
+        return redirect("gift_detail", pk=gift.pk)
+
+    if not gift.items.exists():
+        messages.error(request, "Нельзя продать пустой подарок.")
+        return redirect("gift_detail", pk=gift.pk)
+
+    if request.method == "POST":
+        form = GiftSellForm(request.POST)
+        if form.is_valid():
+            gift.sale_price = form.cleaned_data["sale_price"]
+            gift.sold_at = timezone.now()
+            gift.sold_by = request.user
+            gift.status = Gift.STATUS_SOLD
+            gift.save(update_fields=["sale_price", "sold_at", "sold_by", "status"])
+            messages.success(request, "Подарок продан. Изменения и возвраты запрещены.")
+            return redirect("gift_detail", pk=gift.pk)
+    else:
+        form = GiftSellForm()
+
+    return render(request, "catalog/gift_sell.html", {"gift": gift, "form": form})

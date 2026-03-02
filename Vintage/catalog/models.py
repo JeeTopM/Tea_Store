@@ -289,8 +289,19 @@ class Gift(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT, verbose_name="Статус")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Создан")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Обновлён")
-
     note = models.CharField(max_length=255, blank=True, default="", verbose_name="Комментарий")
+    sale_price = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Цена продажи"
+    )
+    sold_at = models.DateTimeField(null=True, blank=True, verbose_name="Когда продан")
+    sold_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="gifts_sold",
+        verbose_name="Кто продал",
+    )
 
     class Meta:
         verbose_name = "Подарок"

@@ -45,4 +45,5 @@ urlpatterns = [
     path("gifts/<int:pk>/items/<int:item_id>/delete/", views.gift_remove_item, name="gift_remove_item"),
     path("gifts/<int:pk>/cancel/", views.gift_cancel, name="gift_cancel"),
     path("stores/<int:store_pk>/gifts/add/", views.gift_create_for_store, name="gift_create_for_store"),
+    path("gifts/<int:pk>/sell/", views.gift_sell, name="gift_sell"),
 ]
