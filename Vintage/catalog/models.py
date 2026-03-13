@@ -1,5 +1,6 @@
 import re
 from datetime import timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -311,6 +312,14 @@ class Gift(models.Model):
     def __str__(self):
         return f"Подарок #{self.pk} — {self.store.name} — {self.get_status_display()}"
 
+    @property
+    def calculated_total(self):
+        total = Decimal("0.00")
+        for it in self.items.all():
+            if it.line_total:
+                total += it.line_total
+        return total
+
 
 class GiftItem(models.Model):
     gift = models.ForeignKey(Gift, on_delete=models.CASCADE, related_name="items", verbose_name="Подарок")
@@ -330,6 +339,8 @@ class GiftItem(models.Model):
     quantity = models.PositiveIntegerField(verbose_name="Количество")
     note = models.CharField(max_length=255, blank=True, default="", verbose_name="Комментарий")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Добавлено")
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Цена за единицу")
+    line_total = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name="Сумма")
 
     class Meta:
         verbose_name = "Позиция подарка"

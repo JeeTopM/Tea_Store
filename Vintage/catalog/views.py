@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.contrib import messages
@@ -317,7 +318,7 @@ def stock_move(request, stock_id, action):
 
 @login_required
 def gift_list(request):
-    gifts = Gift.objects.select_related("store", "created_by").all()
+    gifts = Gift.objects.select_related("store", "created_by", "sold_by").all()
     return render(request, "catalog/gift_list.html", {"gifts": gifts})
 
 
@@ -338,12 +339,22 @@ def gift_create(request):
 
 @login_required
 def gift_detail(request, pk):
-    gift = get_object_or_404(Gift.objects.select_related("store", "created_by"), pk=pk)
-    items = gift.items.select_related("stock__batch__product", "stock__store").all()
+    gift = get_object_or_404(
+        Gift.objects.select_related("store", "created_by", "sold_by"),
+        pk=pk,
+    )
+    items = gift.items.select_related("stock__batch__product__category", "stock__store").all()
+    editable = gift.status not in (Gift.STATUS_SOLD, Gift.STATUS_CANCELED)
+
+    profit = None
+    if gift.sale_price is not None:
+        profit = gift.sale_price - gift.calculated_total
 
     return render(request, "catalog/gift_detail.html", {
         "gift": gift,
         "items": items,
+        "editable": editable,
+        "profit": profit,
         "stock_form": GiftAddStockItemForm(store=gift.store),
         "extra_form": GiftAddExtraItemForm(),
     })
@@ -351,7 +362,7 @@ def gift_detail(request, pk):
 
 def ensure_gift_editable(request, gift):
     if gift.status in (Gift.STATUS_SOLD, Gift.STATUS_CANCELED):
-        messages.error(request, "Нельзя изменять проданный/отменённый подарок.")
+        messages.error(request, "Нельзя изменять проданный или отменённый подарок.")
         return False
     return True
 
@@ -363,27 +374,24 @@ def gift_add_stock_item(request, pk):
     if request.method != "POST":
         return redirect("gift_detail", pk=gift.pk)
 
-    form = GiftAddStockItemForm(request.POST)
+    if not ensure_gift_editable(request, gift):
+        return redirect("gift_detail", pk=gift.pk)
+
+    form = GiftAddStockItemForm(request.POST, store=gift.store)
     if not form.is_valid():
-        messages.error(request, "Ошибка формы")
+        messages.error(request, "Проверь заполнение формы добавления со склада.")
         return redirect("gift_detail", pk=gift.pk)
 
     stock = form.cleaned_data["stock"]
     qty = form.cleaned_data["quantity"]
     note = form.cleaned_data["note"]
 
-    # Запрещаем редактировать после продажи
-    if not ensure_gift_editable(request, gift):
-        return redirect("gift_detail", pk=gift.pk)
-
-    # Проверяем, что остаток из того же магазина
     if stock.store_id != gift.store_id:
         messages.error(request, "Нельзя добавлять остаток из другого магазина.")
         return redirect("gift_detail", pk=gift.pk)
 
     try:
         with transaction.atomic():
-            # Резервируем (уменьшаем остаток)
             apply_stock_movement(
                 stock=stock,
                 delta=-qty,
@@ -391,13 +399,23 @@ def gift_add_stock_item(request, pk):
                 user=request.user,
                 comment=f"Подарок #{gift.pk}. {note}".strip(),
             )
+
+            product = stock.batch.product
+            batch_price = stock.batch.price
+            if product.unit == "g":
+                line_total = (Decimal(qty) / Decimal("1000")) * batch_price
+            else:
+                line_total = Decimal(qty) * batch_price
+
             GiftItem.objects.create(
                 gift=gift,
                 stock=stock,
                 quantity=qty,
                 note=note,
+                unit_price=batch_price,
+                line_total=line_total.quantize(Decimal("0.01")),
             )
-        messages.success(request, "Добавлено в подарок (резерв создан)")
+        messages.success(request, "Позиция со склада добавлена в подарок.")
     except ValidationError as e:
         messages.error(request, e.message)
 
@@ -411,22 +429,27 @@ def gift_add_extra_item(request, pk):
     if request.method != "POST":
         return redirect("gift_detail", pk=gift.pk)
 
-    form = GiftAddExtraItemForm(request.POST)
-    if not form.is_valid():
-        messages.error(request, "Ошибка формы")
-        return redirect("gift_detail", pk=gift.pk)
-
-    # Запрещаем редактировать после продажи
     if not ensure_gift_editable(request, gift):
         return redirect("gift_detail", pk=gift.pk)
+
+    form = GiftAddExtraItemForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Проверь заполнение формы дополнительной позиции.")
+        return redirect("gift_detail", pk=gift.pk)
+
+    qty = form.cleaned_data["quantity"]
+    unit_price = form.cleaned_data["unit_price"]
+    line_total = (Decimal(qty) * unit_price).quantize(Decimal("0.01"))
 
     GiftItem.objects.create(
         gift=gift,
         extra_name=form.cleaned_data["extra_name"],
-        quantity=form.cleaned_data["quantity"],
+        quantity=qty,
         note=form.cleaned_data["note"],
+        unit_price=unit_price,
+        line_total=line_total,
     )
-    messages.success(request, "Дополнительная позиция добавлена")
+    messages.success(request, "Дополнительная позиция добавлена.")
     return redirect("gift_detail", pk=gift.pk)
 
 
@@ -438,9 +461,11 @@ def gift_remove_item(request, pk, item_id):
     if request.method != "POST":
         return redirect("gift_detail", pk=gift.pk)
 
+    if not ensure_gift_editable(request, gift):
+        return redirect("gift_detail", pk=gift.pk)
+
     try:
         with transaction.atomic():
-            # Если позиция со склада — возвращаем резерв обратно
             if item.stock_id:
                 apply_stock_movement(
                     stock=item.stock,
@@ -450,13 +475,9 @@ def gift_remove_item(request, pk, item_id):
                     comment=f"Удаление из подарка #{gift.pk}. {item.note}".strip(),
                 )
             item.delete()
-        messages.success(request, "Позиция удалена")
+        messages.success(request, "Позиция удалена.")
     except ValidationError as e:
         messages.error(request, e.message)
-
-    # Запрещаем редактировать после продажи
-    if not ensure_gift_editable(request, gift):
-        return redirect("gift_detail", pk=gift.pk)
 
     return redirect("gift_detail", pk=gift.pk)
 
@@ -468,7 +489,9 @@ def gift_cancel(request, pk):
     if request.method != "POST":
         return redirect("gift_detail", pk=gift.pk)
 
-    # Возвращаем всё, что было зарезервировано со склада
+    if not ensure_gift_editable(request, gift):
+        return redirect("gift_detail", pk=gift.pk)
+
     items = gift.items.select_related("stock").all()
 
     try:
@@ -484,13 +507,9 @@ def gift_cancel(request, pk):
                     )
             gift.status = Gift.STATUS_CANCELED
             gift.save(update_fields=["status"])
-        messages.success(request, "Подарок отменён, резерв возвращён")
+        messages.success(request, "Подарок отменён, резерв возвращён.")
     except ValidationError as e:
         messages.error(request, e.message)
-
-    # Запрещаем редактировать после продажи
-    if not ensure_gift_editable(request, gift):
-        return redirect("gift_detail", pk=gift.pk)
 
     return redirect("gift_detail", pk=gift.pk)
 
@@ -524,7 +543,7 @@ def gift_create_for_store(request, store_pk):
 
 @login_required
 def gift_sell(request, pk):
-    gift = get_object_or_404(Gift, pk=pk)
+    gift = get_object_or_404(Gift.objects.select_related("store", "created_by", "sold_by"), pk=pk)
 
     if gift.status == Gift.STATUS_SOLD:
         messages.error(request, "Подарок уже продан.")
@@ -549,6 +568,16 @@ def gift_sell(request, pk):
             messages.success(request, "Подарок продан. Изменения и возвраты запрещены.")
             return redirect("gift_detail", pk=gift.pk)
     else:
-        form = GiftSellForm()
+        form = GiftSellForm(initial={"sale_price": gift.calculated_total})
 
-    return render(request, "catalog/gift_sell.html", {"gift": gift, "form": form})
+    cost_price = gift.calculated_total
+    profit = None
+    if gift.sale_price is not None:
+        profit = gift.sale_price - cost_price
+
+    return render(request, "catalog/gift_sell.html", {
+        "gift": gift,
+        "form": form,
+        "cost_price": cost_price,
+        "profit": profit,
+    })

@@ -6,6 +6,7 @@
 <div class="mb-3">
   <div><b>Магазин:</b> {{ gift.store.name }}</div>
   <div><b>Собрал:</b> {{ gift.created_by.username }}</div>
+  <div><b>Себестоимость:</b> {{ cost_price }} ₽</div>
 </div>
 
 <form method="post" class="card card-body" style="max-width: 520px;">
@@ -16,6 +17,10 @@
     {{ form.sale_price.label_tag }}
     {{ form.sale_price }}
     {{ form.sale_price.errors }}
+  </div>
+
+  <div class="text-muted small mb-3">
+    Сейчас в поле подставлена себестоимость подарка. Можешь поставить свою цену продажи.
   </div>
 
   <button class="btn btn-success" type="submit">Продать</button>

@@ -3,6 +3,7 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 from .models import Store, ProductCategory, Product, ProductBatch, Stock, StockMovement, Gift
 
+
 class StoreForm(forms.ModelForm):
     class Meta:
         model = Store
@@ -71,6 +72,7 @@ class ProductBatchForm(forms.ModelForm):
 
         return cleaned_data
 
+
 class StockForm(forms.ModelForm):
     class Meta:
         model = Stock
@@ -80,35 +82,37 @@ class StockForm(forms.ModelForm):
             'quantity': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
         }
 
+
 class StockMovementForm(forms.Form):
-    quantity = forms.IntegerField(min_value=1, label="Количество", widget=forms.NumberInput(attrs={"class": "form-control"}))
-    comment = forms.CharField(required=False, label="Комментарий", widget=forms.TextInput(attrs={"class": "form-control"}))
+    quantity = forms.IntegerField(min_value=1, label='Количество', widget=forms.NumberInput(attrs={'class': 'form-control'}))
+    comment = forms.CharField(required=False, label='Комментарий', widget=forms.TextInput(attrs={'class': 'form-control'}))
+
 
 class GiftForm(forms.ModelForm):
     class Meta:
         model = Gift
-        fields = ["store", "note"]
+        fields = ['store', 'note']
         widgets = {
-            "store": forms.Select(attrs={"class": "form-control"}),
-            "note": forms.TextInput(attrs={"class": "form-control"}),
+            'store': forms.Select(attrs={'class': 'form-control'}),
+            'note': forms.TextInput(attrs={'class': 'form-control'}),
         }
 
 
 class GiftAddStockItemForm(forms.Form):
     stock = forms.ModelChoiceField(
         queryset=Stock.objects.none(),
-        label="Остаток (партия в магазине)",
-        widget=forms.Select(attrs={"class": "form-control select2"}),
+        label='Остаток (партия в магазине)',
+        widget=forms.Select(attrs={'class': 'form-control select2'}),
     )
     quantity = forms.IntegerField(
         min_value=1,
-        label="Количество",
-        widget=forms.NumberInput(attrs={"class": "form-control"}),
+        label='Количество',
+        widget=forms.NumberInput(attrs={'class': 'form-control'}),
     )
     note = forms.CharField(
         required=False,
-        label="Комментарий",
-        widget=forms.TextInput(attrs={"class": "form-control"}),
+        label='Комментарий',
+        widget=forms.TextInput(attrs={'class': 'form-control'}),
     )
 
     def __init__(self, *args, store=None, **kwargs):
@@ -116,43 +120,51 @@ class GiftAddStockItemForm(forms.Form):
 
         qs = (
             Stock.objects
-            .select_related("store", "batch__product__category")
+            .select_related('store', 'batch__product__category')
             .filter(quantity__gt=0)
-            .order_by("batch__product__category__name", "batch__product__name", "batch__expiration_date")
+            .order_by('batch__product__category__name', 'batch__product__name', 'batch__expiration_date')
         )
         if store is not None:
             qs = qs.filter(store=store)
 
-        self.fields["stock"].queryset = qs
+        self.fields['stock'].queryset = qs
 
-        # Читаемая подпись в выпадающем списке
         def _label(obj: Stock):
             p = obj.batch.product
-            unit = p.get_unit_display() if hasattr(p, "get_unit_display") else ""
-            cat = getattr(p.category, "name", "")
+            unit = p.get_unit_display() if hasattr(p, 'get_unit_display') else ''
+            cat = getattr(p.category, 'name', '')
             return f"{cat} — {p.name} | до {obj.batch.expiration_date} | остаток {obj.quantity} {unit}"
 
-        self.fields["stock"].label_from_instance = _label
+        self.fields['stock'].label_from_instance = _label
 
 
 class GiftCreateForStoreForm(forms.ModelForm):
     class Meta:
         model = Gift
-        fields = ["note"]
+        fields = ['note']
         widgets = {
-            "note": forms.TextInput(attrs={"class": "form-control"}),
+            'note': forms.TextInput(attrs={'class': 'form-control'}),
         }
 
+
 class GiftAddExtraItemForm(forms.Form):
-    extra_name = forms.CharField(label="Название", widget=forms.TextInput(attrs={"class": "form-control"}))
-    quantity = forms.IntegerField(min_value=1, label="Количество", widget=forms.NumberInput(attrs={"class": "form-control"}))
-    note = forms.CharField(required=False, label="Комментарий", widget=forms.TextInput(attrs={"class": "form-control"}))
+    extra_name = forms.CharField(label='Название', widget=forms.TextInput(attrs={'class': 'form-control'}))
+    quantity = forms.IntegerField(min_value=1, label='Количество', widget=forms.NumberInput(attrs={'class': 'form-control'}))
+    unit_price = forms.DecimalField(
+        min_value=0,
+        decimal_places=2,
+        max_digits=10,
+        label='Цена за единицу',
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': 0}),
+    )
+    note = forms.CharField(required=False, label='Комментарий', widget=forms.TextInput(attrs={'class': 'form-control'}))
+
 
 class GiftSellForm(forms.Form):
     sale_price = forms.DecimalField(
         min_value=0,
         decimal_places=2,
         max_digits=10,
-        label="Цена продажи",
-        widget=forms.NumberInput(attrs={"class": "form-control"}),
+        label='Цена продажи',
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': 0}),
     )
